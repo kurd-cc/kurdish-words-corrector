@@ -2,6 +2,8 @@ import json
 from itertools import product
 import argparse
 import re
+from multiprocessing.pool import ThreadPool
+
 
 parser = argparse.ArgumentParser(description='Correct Kurdish words especially the ones that went through wrong '
                                              'unicode settings')
@@ -12,7 +14,8 @@ parser.add_argument('-o', '--output', dest='output', type=str, help='The output 
 parser.add_argument('-d', '--depth', dest='depth', type=int, help='values from 1-3 depend on how depth (then slow) '
                                                                   'you want to correct, 1 is the fastest and the lest'
                                                                   ' depth, 3 is the slowest the most depth')
-parser.add_argument('-p', '--parser', dest='parser', type=str, help='Parse the output file (json or yaml)')
+parser.add_argument('-p', '--parser', dest='parser', type=str, help='Parse the output file (json or yaml), default=yaml')
+parser.add_argument('-wr', '--workers', dest='workers', type=int, help='The number of workers (threads), default=100')
 
 args = parser.parse_args()
 
@@ -69,9 +72,9 @@ def correct_word(word, depth=1):
                 'possibilities': possibilities}
 
 
-def correct_text(text, output_path=None, depth=1, parser="yaml"):
+def correct_text(text, output_path=None, depth=1, parser="yaml", workers=100):
     all_words = list(filter(None, __split_text(text).strip().split("\n")))
-    output = __get_output(all_words, depth)
+    output = __get_output(all_words, depth, workers)
 
     if output_path is None:
         return str(output)
@@ -95,20 +98,24 @@ def correct_text(text, output_path=None, depth=1, parser="yaml"):
             __save_to_file(str(output), output_states_path)
 
 
-def correct_file(file_path, output_path=None, depth=1, parser="yaml"):
+def correct_file(file_path, output_path=None, depth=1, parser="yaml", workers=100):
     text = __read_from_file(file_path)
-    return correct_text(text, output_path, depth, parser)
+    return correct_text(text, output_path, depth, parser, workers)
 
 
-def __get_output(all_words, depth=1):
+def __get_output(all_words, depth=1, workers=100):
     output = dict()
     results = []
     current_correct_words = []
     incorrect_words_with_possible_corrections = []
     incorrect_words_without_possible_corrections = []
 
+    pool = ThreadPool(workers)
     for word in all_words:
-        results.append(correct_word(word, depth))
+        results.append(pool.apply_async(correct_word, args=(word, depth)))
+    pool.close()
+    pool.join()
+    results = [r.get() for r in results]
 
     for item in results:
         if item['status'] == 0:
@@ -157,6 +164,10 @@ if __name__ == "__main__":
     if args.depth is not None:
         depth = args.depth
 
+    workers = 100
+    if args.workers is not None:
+        workers = args.workers
+
     parser = "yaml"
     if args.parser is not None and (args.parser.lower() == "yaml" or args.parser.lower() == "json"):
         parser = args.parser
@@ -164,14 +175,14 @@ if __name__ == "__main__":
     if args.word is not None and len(args.word.strip()) > 0:
         print(correct_word(args.word, depth=depth))
     elif args.text is not None and len(args.text.strip()) > 0 and args.output is None:
-        print(correct_text(args.text, depth=depth, parser=parser))
+        print(correct_text(args.text, depth=depth, parser=parser, workers=workers))
     elif args.text is not None and len(args.text.strip()) > 0 and args.output is not None:
-        correct_text(args.text, output_path=args.output, depth=depth, parser=parser)
+        correct_text(args.text, output_path=args.output, depth=depth, parser=parser, workers=workers)
         print("Success:", "Corrected text has been saved saved to", args.output)
     elif args.file is not None and len(args.file.strip()) > 0 and args.output is None:
-        print(correct_file(args.file, depth=depth, parser=parser))
+        print(correct_file(args.file, depth=depth, parser=parser, workers=workers))
     elif args.file is not None and len(args.file.strip()) > 0 and args.output is not None:
-        correct_file(args.file, output_path=args.output, depth=depth, parser=parser)
+        correct_file(args.file, output_path=args.output, depth=depth, parser=parser, workers=workers)
         print("Success:", "Corrected text has been saved saved to", args.output)
     else:
         print("Run 'python kurdish-words-corrector.py -h to find the usage'")
