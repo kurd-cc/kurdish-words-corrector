@@ -75,4 +75,4 @@ An example of the resulted `json`: <br>
 | -f <strong>or</strong> --file    | The path of the file to correct its text's words       |
 | -d <strong>or</strong> --depth | With the values 1, 2 or 3, to increase the level of brute forcing but also the time it needs to be processed       |
 | -p <strong>or</strong> --parser    | The parsing of the outputed file; yaml (default) or json       |
-| -wr <strong>or</strong> --workers    | The numbers of workers (threads) that you want to use, default=100      |
+| -wr <strong>or</strong> --workers    | The number of workers (threads) that you want to use, default=100      |
